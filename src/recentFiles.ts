@@ -19,11 +19,18 @@ export class RecentFileManager extends Component{
     private plugin: HomeTab
     private pluginSettings: HomeTabSettings
 
+    private recentFilesPath: string;
+
+
     constructor(app: App, plugin: HomeTab){
         super()
         this.app = app
         this.plugin = plugin
         this.pluginSettings = plugin.settings
+        this.recentFilesPath = `${this.plugin.manifest.dir}/recentFiles.json`
+
+        
+        this.loadStoredRecentFiles()
     }
     
     onload(): void {
@@ -31,7 +38,6 @@ export class RecentFileManager extends Component{
         this.registerEvent(this.app.vault.on('delete', async (file) => {file instanceof TFile ? this.removeRecentFile(file) : null; await this.storeRecentFiles()})) // Remove recent file if deleted
         this.registerEvent(this.app.vault.on('rename',  (file) => file instanceof TFile ? this.onFileRename() : null)) // Update displayed name on file rename
 
-        this.loadStoredRecentFiles()
     }
 
     private updateRecentFiles(openedFile: TFile | null): void{
@@ -93,34 +99,27 @@ export class RecentFileManager extends Component{
     }
 
     private async storeRecentFiles(): Promise<void>{
-        if(this.plugin.settings.storeRecentFile){
-            let storeObj: recentFileStore[] = []
-            get(recentFiles).forEach((item) => storeObj.push({
-                filepath: item.file.path, // Store only the path instead of the entire TFile instance
-                timestamp: item.timestamp
-            }))
-            this.plugin.settings.recentFilesStore = storeObj
-            await this.plugin.saveData(this.plugin.settings)
-        }
+        const storeObj = get(recentFiles).map((item) => ({filepath: item.file.path, timestamp: item.timestamp}))
+
+        const data = JSON.stringify(storeObj, null, 2)
+        await this.app.vault.adapter.write(this.recentFilesPath, data)
     }
 
-    private loadStoredRecentFiles(): void{
-        if(this.plugin.settings.storeRecentFile){
-            let filesToLoad: recentFile[] = []
-            this.app.workspace.onLayoutReady(() => { 
-                this.plugin.settings.recentFilesStore.forEach((item) => {
-                    let file: TAbstractFile | null = this.app.vault.getAbstractFileByPath(item.filepath)
-                    if(file && file instanceof TFile){
-                        filesToLoad.push({
-                            file: file,
-                            timestamp: item.timestamp
-                        })
-                    }
-                })
-                recentFiles.set(filesToLoad)
-            })
-        }
-    }
+    private async loadStoredRecentFiles(): Promise<void>{
+       const exists = await this.app.vault.adapter.exists(this.recentFilesPath)
+    if (!exists) return
 
+    const data = await this.app.vault.adapter.read(this.recentFilesPath)
+    const storedFiles = JSON.parse(data) as recentFileStore[]
+    const filesToLoad: recentFile[] = []
+
+    storedFiles.forEach((item) => {
+        const file = this.app.vault.getAbstractFileByPath(item.filepath)
+        if (file && file instanceof TFile) {
+            filesToLoad.push({ file, timestamp: item.timestamp })
+        }
+    })
+        recentFiles.set(filesToLoad)
+    }
 }
 

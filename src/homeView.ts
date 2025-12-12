@@ -68,7 +68,6 @@ export class HomeTabView extends FileView{
     plugin: HomeTab
     homepage: Homepage
     searchBar: HomeTabSearchBar
-    containerEl: HTMLElement
 
     constructor(leaf: WorkspaceLeaf, plugin: HomeTab) {
         super(leaf);
